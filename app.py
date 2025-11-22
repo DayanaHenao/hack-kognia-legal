@@ -8,57 +8,68 @@ from llama_index.embeddings.gemini import GeminiEmbedding
 # --- CONFIGURACIÓN VISUAL ---
 st.set_page_config(page_title="Asistente Legal Kognia", layout="wide")
 
-st.title("⚖️ Hack-Kognia: Asistente Legal con IA")
+st.title("⚖️ Hack-Kognia: Asistente Legal IA")
 st.markdown("""
-**Sistema RAG (Retrieval-Augmented Generation):** Sube tu documento y la IA buscará la respuesta exacta dentro del texto.
-*Modelo activo: Gemini 1.5 Flash (Google)*
+**Sistema RAG:** Sube un documento y haz preguntas. La IA responderá basándose ÚNICAMENTE en el texto.
 """)
 
-# --- BARRA LATERAL ---
+# --- BARRA LATERAL DE CONFIGURACIÓN ---
 with st.sidebar:
-    st.header("Paso 1: Configuración")
-    # .strip() elimina espacios en blanco accidentales al copiar
-    api_key_input = st.text_input("Pega tu Google API Key aquí", type="password")
+    st.header("🔧 Configuración Técnica")
     
+    # 1. API KEY
+    api_key_input = st.text_input("1. Pega tu Google API Key", type="password")
+    
+    # 2. SELECTOR DE MODELO (¡LA SOLUCIÓN AL ERROR 404!)
     st.divider()
-    st.info("Si sale error 404, verifica que tu API Key sea correcta y tenga permisos en Google AI Studio.")
+    st.write("2. Selecciona el modelo (Si uno falla, prueba otro):")
+    model_option = st.selectbox(
+        "Modelo de IA:",
+        (
+            "models/gemini-1.5-flash",  # El más rápido y nuevo
+            "models/gemini-pro",        # El clásico (a veces funciona mejor en cuentas viejas)
+            "models/gemini-1.5-pro",    # El más inteligente (pero más lento)
+            "models/gemini-1.0-pro"     # Versión legacy
+        )
+    )
+    
+    st.info(f"Intentando conectar con: {model_option}")
 
 # --- LÓGICA PRINCIPAL ---
 if api_key_input:
     try:
-        # Limpiamos la clave por seguridad
-        my_api_key = api_key_input.strip()
-        os.environ["GOOGLE_API_KEY"] = my_api_key
+        # Limpieza y configuración
+        os.environ["GOOGLE_API_KEY"] = api_key_input.strip()
         
-        # --- CONFIGURACIÓN DEL MODELO (LA SOLUCIÓN) ---
-        # Usamos 'models/gemini-1.5-flash' que es el más compatible actualmente
-        Settings.llm = Gemini(model="models/gemini-1.5-flash", temperature=0)
-        Settings.embed_model = GeminiEmbedding(model_name="models/embedding-001")
+        # Configuración Dinámica (Usa lo que seleccionaste en el menú)
+        try:
+            Settings.llm = Gemini(model=model_option, temperature=0)
+            Settings.embed_model = GeminiEmbedding(model_name="models/embedding-001")
+        except Exception as e:
+            st.error(f"Error configurando el modelo {model_option}. Prueba seleccionar otro en la lista.")
 
         # --- CARGA DE ARCHIVOS ---
-        uploaded_file = st.file_uploader("Paso 2: Sube tu PDF legal", type=['pdf'])
+        uploaded_file = st.file_uploader("3. Sube tu PDF legal", type=['pdf'])
 
         if uploaded_file:
+            # Crear archivo temporal
             with tempfile.TemporaryDirectory() as temp_dir:
                 temp_path = os.path.join(temp_dir, "temp.pdf")
                 with open(temp_path, "wb") as f:
                     f.write(uploaded_file.getvalue())
 
-                with st.spinner("⚙️ Indexando documento... (Creando base de conocimiento)"):
+                # Procesamiento
+                with st.spinner("⚙️ Indexando documento..."):
                     try:
-                        # Cargar datos
                         documents = SimpleDirectoryReader(input_dir=temp_dir).load_data()
-                        # Crear índice vectorial (RAG)
                         index = VectorStoreIndex.from_documents(documents)
                         query_engine = index.as_query_engine()
-                        st.success("✅ ¡Documento indexado! Ya puedes preguntar.")
+                        st.success("✅ Documento listo.")
                     except Exception as e:
-                        st.error(f"Error al leer el documento: {e}")
+                        st.error(f"Error leyendo el PDF: {e}")
 
                 # --- CHAT ---
                 st.divider()
-                st.subheader("💬 Paso 3: Pregúntale al documento")
-
                 if "messages" not in st.session_state:
                     st.session_state.messages = []
 
@@ -66,30 +77,30 @@ if api_key_input:
                     with st.chat_message(message["role"]):
                         st.markdown(message["content"])
 
-                if prompt := st.chat_input("Escribe tu pregunta aquí..."):
+                if prompt := st.chat_input("Escribe tu pregunta..."):
                     st.session_state.messages.append({"role": "user", "content": prompt})
                     with st.chat_message("user"):
                         st.markdown(prompt)
 
                     with st.chat_message("assistant"):
-                        with st.spinner("Analizando evidencia legal..."):
+                        with st.spinner("Consultando documento..."):
                             try:
                                 response = query_engine.query(prompt)
                                 st.markdown(response.response)
                                 
-                                # Mostrar evidencia (Requisito clave)
-                                with st.expander("🔍 Ver fragmento original del texto"):
+                                # Evidencia
+                                with st.expander("🔍 Ver Evidencia (Fuente)"):
                                     if hasattr(response, 'source_nodes') and response.source_nodes:
                                         st.info(response.source_nodes[0].get_content())
                                     else:
-                                        st.warning("No se encontró una cita exacta en el texto.")
+                                        st.warning("Respuesta general basada en contexto.")
                                 
                                 st.session_state.messages.append({"role": "assistant", "content": response.response})
                             except Exception as e:
-                                st.error(f"Error al generar respuesta: {e}")
+                                st.error(f"Error al generar respuesta. Intenta cambiar el modelo en el menú.")
 
     except Exception as e:
-        st.error(f"Error crítico de configuración: {e}")
+        st.error(f"Error general: {e}")
 
 elif not api_key_input:
-    st.warning("👈 Para empezar, pega tu API Key en el menú de la izquierda.")
+    st.warning("👈 Pega tu API Key para comenzar.")
