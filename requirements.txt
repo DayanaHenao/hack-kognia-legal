@@ -1,7 +1,7 @@
 streamlit
-llama-index-core
-llama-index-llms-gemini
-llama-index-embeddings-gemini
+google-generativeai==0.8.3
+llama-index-core==0.11.3
+llama-index-llms-gemini==0.3.4
+llama-index-embeddings-gemini==0.3.4
 llama-index-readers-file
 pypdf
-google-generativeai>=0.8.3
