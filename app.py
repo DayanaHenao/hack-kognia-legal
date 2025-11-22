@@ -5,80 +5,87 @@ from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, Settings
 from llama_index.llms.gemini import Gemini
 from llama_index.embeddings.gemini import GeminiEmbedding
 
-# -[span_0](start_span)-- CONFIGURACIÓN DE LA PÁGINA (Requisito: Interfaz clara[span_0](end_span)) ---
+# --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(page_title="Asistente Legal Kognia", layout="wide")
 
 st.title("⚖️ Hack-Kognia: Asistente Legal Inteligente")
 st.markdown("""
-Este sistema utiliza **RAG (Retrieval-Augmented Generation)** para analizar documentos legales.
-Sube un contrato o ley y haz preguntas precisas.
+Este sistema utiliza **RAG (Retrieval-Augmented Generation)** con la tecnología más reciente 
+de Google (Gemini 1.5 Flash) para analizar documentos legales.
 """)
 
-# --- BARRA LATERAL: CONFIGURACIÓN ---
+# --- BARRA LATERAL ---
 with st.sidebar:
     st.header("Configuración")
     api_key = st.text_input("Google API Key", type="password")
-    st.info("Este sistema cumple con el reto de indexación y búsqueda semántica.")
+    st.info("Usando modelo: gemini-1.5-flash (Más rápido y preciso)")
 
 # --- LÓGICA PRINCIPAL ---
 if api_key:
-    # Configurar el cerebro de la IA (Gemini)
-    os.environ["GOOGLE_API_KEY"] = api_key
-    Settings.llm = Gemini(model="models/gemini-pro", temperature=0)
-    Settings.embed_model = GeminiEmbedding(model_name="models/embedding-001")
+    try:
+        # Configurar el cerebro de la IA (AQUÍ ESTABA EL ERROR, YA CORREGIDO)
+        os.environ["GOOGLE_API_KEY"] = api_key
+        
+        # Usamos "gemini-1.5-flash" que es el modelo actual y rápido
+        Settings.llm = Gemini(model="models/gemini-1.5-flash", temperature=0)
+        
+        # Usamos el modelo de embeddings más estable
+        Settings.embed_model = GeminiEmbedding(model_name="models/text-embedding-004")
 
-    # -[span_1](start_span)-- PASO 1: CARGA DE DOCUMENTOS[span_1](end_span) ---
-    uploaded_file = st.file_uploader("Sube tu documento legal (PDF)", type=['pdf'])
+        # --- PASO 1: CARGA DE DOCUMENTOS ---
+        uploaded_file = st.file_uploader("Sube tu documento legal (PDF)", type=['pdf'])
 
-    if uploaded_file:
-        # Guardar el PDF temporalmente para poder leerlo
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = os.path.join(temp_dir, "temp.pdf")
-            with open(temp_path, "wb") as f:
-                f.write(uploaded_file.getvalue())
+        if uploaded_file:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_path = os.path.join(temp_dir, "temp.pdf")
+                with open(temp_path, "wb") as f:
+                    f.write(uploaded_file.getvalue())
 
-            with st.spinner("Indexando documento y creando embeddings... (Esto cumple el requisito técnico)"):
-                # Cargar y vectorizar (Aquí ocurre la magia del RAG)
-                documents = SimpleDirectoryReader(input_dir=temp_dir).load_data()
-                index = VectorStoreIndex.from_documents(documents)
-                query_engine = index.as_query_engine()
-                st.success("¡Documento indexado exitosamente!")
+                with st.spinner("Indexando documento... (Esto puede tardar unos segundos)"):
+                    try:
+                        documents = SimpleDirectoryReader(input_dir=temp_dir).load_data()
+                        index = VectorStoreIndex.from_documents(documents)
+                        query_engine = index.as_query_engine()
+                        st.success("¡Documento procesado correctamente!")
+                    except Exception as e:
+                        st.error(f"Error procesando el PDF: {e}")
 
-            # -[span_2](start_span)-- PASO 2: INTERFAZ DE CHAT[span_2](end_span) ---
-            st.divider()
-            st.subheader("💬 Chat con el Documento")
+                # --- PASO 2: INTERFAZ DE CHAT ---
+                st.divider()
+                st.subheader("💬 Chat con el Documento")
 
-            # Historial del chat
-            if "messages" not in st.session_state:
-                st.session_state.messages = []
+                if "messages" not in st.session_state:
+                    st.session_state.messages = []
 
-            # Mostrar mensajes anteriores
-            for message in st.session_state.messages:
-                with st.chat_message(message["role"]):
-                    st.markdown(message["content"])
+                for message in st.session_state.messages:
+                    with st.chat_message(message["role"]):
+                        st.markdown(message["content"])
 
-            # Entrada del usuario
-            if prompt := st.chat_input("Ej: ¿Cuáles son las obligaciones del arrendatario?"):
-                # Guardar y mostrar pregunta
-                st.session_state.messages.append({"role": "user", "content": prompt})
-                with st.chat_message("user"):
-                    st.markdown(prompt)
+                if prompt := st.chat_input("Ej: ¿Cuáles son las cláusulas de rescisión?"):
+                    st.session_state.messages.append({"role": "user", "content": prompt})
+                    with st.chat_message("user"):
+                        st.markdown(prompt)
 
-                # Generar respuesta
-                with st.chat_message("assistant"):
-                    with st.spinner("Buscando evidencia en el texto..."):
-                        # [span_3](start_span)Aquí el sistema busca en los vectores, no inventa[span_3](end_span)
-                        response = query_engine.query(prompt)
-                        
-                        # Mostrar respuesta
-                        st.markdown(response.response)
-                        
-                        # [span_4](start_span)Mostrar fuentes (Requisito: Evidencia[span_4](end_span))
-                        with st.expander("🔍 Ver fuente exacta (Evidencia)"):
-                            st.write(response.source_nodes[0].get_content())
-                        
-                        # Guardar en historial
-                        st.session_state.messages.append({"role": "assistant", "content": response.response})
+                    with st.chat_message("assistant"):
+                        with st.spinner("Analizando evidencia..."):
+                            try:
+                                response = query_engine.query(prompt)
+                                st.markdown(response.response)
+                                
+                                # Mostrar fuentes (Requisito del reto)
+                                with st.expander("🔍 Ver fuente exacta (Evidencia)"):
+                                    # Verificación de seguridad por si no encuentra fuente
+                                    if hasattr(response, 'source_nodes') and response.source_nodes:
+                                        st.write(response.source_nodes[0].get_content())
+                                    else:
+                                        st.write("Respuesta general basada en el contexto.")
+                                
+                                st.session_state.messages.append({"role": "assistant", "content": response.response})
+                            except Exception as e:
+                                st.error(f"Ocurrió un error al generar la respuesta: {e}")
+
+    except Exception as e:
+        st.error(f"Error de configuración de API: {e}")
 
 elif not api_key:
-    st.warning("⚠️ Por favor ingresa tu API Key en la barra lateral para iniciar el sistema RAG.")
+    st.warning("⚠️ Por favor ingresa tu API Key en la barra lateral.")
